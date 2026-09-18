@@ -15,7 +15,7 @@ const LEAVE_TYPES = [
     defaultAllowanceDays: 10,
   },
   {
-    name: "Earned Leave",
+    name: "Unpaid Leave",
     requiresApproval: true,
     drawsFromBalance: true,
     defaultAllowanceDays: 15,
