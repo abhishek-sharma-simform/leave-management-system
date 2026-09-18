@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 
 // All routes for the app live behind this one entry point
-app.use(routes);
+app.use("/api/v1", routes);
 
 // Runs only if no route above matched the request
 app.use(notFoundHandler);
