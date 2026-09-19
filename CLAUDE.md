@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A leave management system API (Express + Prisma + PostgreSQL). Employees submit leave requests against a leave balance; managers approve/reject them. Currently implemented: auth, health, and read-only leave types (`GET /api/v1/leave-types`). Leave request/balance/decision endpoints are not yet built (schema for them already exists, see below).
+A leave management system API (Express + Prisma + PostgreSQL). Employees submit leave requests against a leave balance; managers approve/reject them. Currently implemented: auth, health, read-only leave types (`GET /api/v1/leave-types`), and leave request creation/listing (`POST /api/v1/leave-requests`, `GET /api/v1/leave-requests/me` — see Leave Requests below). Leave balance management and manager decision (approve/reject) endpoints are not yet built (schema for them already exists, see below).
 
 ## Commands
 
@@ -40,10 +40,17 @@ Request flow: `server.ts` → `app.ts` → `routes/index.ts` (mounted at `/api/v
 - **config/prisma.ts** builds the Prisma client using the `@prisma/adapter-pg` driver adapter over `pg`, not the default connector — this is required by the Prisma 7 setup in this project.
 - `notFoundHandler` and `errorHandler` are mounted last, in that order, in `app.ts`. Any new router must be mounted in `routes/index.ts` *before* these two.
 - `leave-type.routes.ts` / `.controller.ts` / `.service.ts` is the simplest example of the full route→controller→service→Prisma pattern (a single read-only `findMany`) — use it as the template for new resources rather than `auth`, which is a special case.
+- `leaveRequest.routes.ts` / `.controller.ts` (mounted at `/leave-requests`) is an **exception** to the route→controller→service→Prisma pattern above: there is no `leave-request.service.ts` yet, so `leaveRequest.controller.ts` calls Prisma directly and holds the business logic itself (leave-day calculation, balance check). Don't copy this shape for new resources — follow `leave-type` instead — and consider extracting a service here if this controller grows further.
+- **utils/** holds framework-agnostic pure helpers shared across services/controllers (currently just `dateUtils.ts`'s `calculateLeaveDays`, which counts weekdays only). New date/calculation logic that isn't Prisma-specific belongs here rather than inline in a controller.
 
 ## Auth
 
 JWT-based. `POST /api/v1/auth/login` verifies bcrypt password hash, signs a 1-day JWT containing `{ userId, role }`. Protected routes use `authMiddleware` (verifies token, sets `req.user`) followed by `requireRole("MANAGER" | "EMPLOYEE")` where role-gating is needed. `Role` enum lives in `prisma/schema.prisma` (`EMPLOYEE`, `MANAGER`) — keep `requireRole` call sites and JWT payload roles in sync with it.
+
+## Leave Requests
+
+- `POST /api/v1/leave-requests` (auth required) — body: `{ leaveTypeId, startDate, endDate, reason? }`. `reason` is stored on the `note` column of `LeaveRequest` (field names differ — don't assume the request body matches the Prisma model 1:1). Validates `leaveTypeId` exists, dates parse and `startDate <= endDate`, computes `daysRequested` via `calculateLeaveDays` (weekdays only, weekends excluded), and — only when the leave type's `drawsFromBalance` is true — checks the caller's `LeaveBalance` row for the current year (`allocatedDays - usedDays`) before creating the request with `status: PENDING`.
+- `GET /api/v1/leave-requests/me` (auth required) — lists the authenticated user's own leave requests (`include: leaveType`, newest first). No manager/team-wide listing endpoint exists yet.
 
 ## Known gaps (worth checking before assuming otherwise)
 
@@ -51,3 +58,5 @@ JWT-based. `POST /api/v1/auth/login` verifies bcrypt password hash, signs a 1-da
 - No input validation library (zod, etc.) yet — controllers only check for field presence, not shape.
 - No rate limiting on `/auth/login`.
 - `npm run build` / `npm start` don't currently produce a runnable `dist/` (tsc has `noEmit: true`).
+- `leaveRequest.controller.ts` has no service layer (see Architecture above) — Prisma calls and balance-check logic live directly in the controller.
+- No `PATCH`/decision endpoint yet for managers to approve or reject a `LeaveRequest`, and no endpoint to view or seed a user's `LeaveBalance` — a request against a leave type with `drawsFromBalance: true` will always 400 with "Leave balance not found" until balances are created some other way (e.g. directly via `prisma/seed.ts` or Prisma Studio).
