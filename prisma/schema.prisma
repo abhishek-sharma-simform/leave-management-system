@@ -21,6 +21,7 @@ enum LeaveRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 enum LeaveDecisionAction {
