@@ -11,6 +11,12 @@ export async function loginController(req: Request, res: Response) {
       });
     }
 
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({
+        message: "Email and password must be strings",
+      });
+    }
+
     const result = await login(email, password);
 
     return res.status(200).json(result);

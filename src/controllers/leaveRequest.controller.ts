@@ -27,10 +27,25 @@ export async function createLeaveRequest(req: Request, res: Response) {
       });
     }
 
+    const leaveTypeIdNum = Number(leaveTypeId);
+
+    if (!Number.isInteger(leaveTypeIdNum) || leaveTypeIdNum <= 0) {
+      return res.status(400).json({
+        error: "leaveTypeId must be a positive integer",
+      });
+    }
+
     // 3. Validate dates are provided
     if (!startDate || !endDate) {
       return res.status(400).json({
         error: "startDate and endDate are required",
+      });
+    }
+
+    // 3b. Validate reason type, if provided
+    if (reason !== undefined && reason !== null && typeof reason !== "string") {
+      return res.status(400).json({
+        error: "reason must be a string",
       });
     }
 
@@ -58,7 +73,7 @@ export async function createLeaveRequest(req: Request, res: Response) {
     // 7. Check whether leave type exists
     const leaveType = await prisma.leaveType.findUnique({
       where: {
-        id: Number(leaveTypeId),
+        id: leaveTypeIdNum,
       },
     });
 
@@ -160,7 +175,7 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
 
     const requestId = Number(req.params.id);
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         error: "Invalid request ID",
       });
@@ -176,7 +191,15 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
     } = {};
 
     if (leaveTypeId !== undefined) {
-      updates.leaveTypeId = Number(leaveTypeId);
+      const leaveTypeIdNum = Number(leaveTypeId);
+
+      if (!Number.isInteger(leaveTypeIdNum) || leaveTypeIdNum <= 0) {
+        return res.status(400).json({
+          error: "leaveTypeId must be a positive integer",
+        });
+      }
+
+      updates.leaveTypeId = leaveTypeIdNum;
     }
 
     if (startDate !== undefined) {
@@ -201,6 +224,12 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
       }
 
       updates.endDate = parsedEndDate;
+    }
+
+    if (reason !== undefined && reason !== null && typeof reason !== "string") {
+      return res.status(400).json({
+        error: "reason must be a string",
+      });
     }
 
     if (reason !== undefined) {
@@ -267,7 +296,7 @@ export async function cancelMyLeaveRequest(req: Request, res: Response) {
 
     const requestId = Number(req.params.id);
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         error: "Invalid request ID",
       });
@@ -320,7 +349,7 @@ export async function getLeaveRequestHistoryController(
 
     const requestId = Number(req.params.id);
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         error: "Invalid request ID",
       });

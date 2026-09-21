@@ -46,7 +46,7 @@ export async function getManagerRequestById(req: Request, res: Response) {
     const requestId = Number(req.params.id);
     const managerId = req?.user?.id;
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         message: "Invalid request ID",
       });
@@ -92,7 +92,7 @@ export async function approveLeaveRequest(req: Request, res: Response) {
     const requestId = Number(req.params.id);
     const managerId = req?.user?.id;
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         message: "Invalid request ID",
       });
@@ -106,6 +106,11 @@ export async function approveLeaveRequest(req: Request, res: Response) {
         user: {
           select: {
             managerId: true,
+          },
+        },
+        leaveType: {
+          select: {
+            drawsFromBalance: true,
           },
         },
       },
@@ -138,37 +143,39 @@ export async function approveLeaveRequest(req: Request, res: Response) {
     const year = request.startDate.getFullYear();
 
     await prisma.$transaction(async (tx) => {
-      const balances = await tx.$queryRaw<LeaveBalanceRow[]>`
-        SELECT *
-        FROM "LeaveBalance"
-        WHERE "userId" = ${request.userId}
-          AND "leaveTypeId" = ${request.leaveTypeId}
-          AND "year" = ${year}
-        FOR UPDATE
-      `;
+      if (request.leaveType.drawsFromBalance) {
+        const balances = await tx.$queryRaw<LeaveBalanceRow[]>`
+          SELECT *
+          FROM "LeaveBalance"
+          WHERE "userId" = ${request.userId}
+            AND "leaveTypeId" = ${request.leaveTypeId}
+            AND "year" = ${year}
+          FOR UPDATE
+        `;
 
-      const balance = balances[0];
+        const balance = balances[0];
 
-      if (!balance) {
-        throw new Error("BALANCE_NOT_FOUND");
-      }
+        if (!balance) {
+          throw new Error("BALANCE_NOT_FOUND");
+        }
 
-      const remaining = balance.allocatedDays - balance.usedDays;
+        const remaining = balance.allocatedDays - balance.usedDays;
 
-      if (remaining < request.daysRequested) {
-        throw new Error("INSUFFICIENT_BALANCE");
-      }
+        if (remaining < request.daysRequested) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
 
-      await tx.leaveBalance.update({
-        where: {
-          id: balance.id,
-        },
-        data: {
-          usedDays: {
-            increment: request.daysRequested,
+        await tx.leaveBalance.update({
+          where: {
+            id: balance.id,
           },
-        },
-      });
+          data: {
+            usedDays: {
+              increment: request.daysRequested,
+            },
+          },
+        });
+      }
 
       await tx.leaveRequest.update({
         where: {
@@ -217,7 +224,7 @@ export async function rejectLeaveRequest(req: Request, res: Response) {
     const requestId = Number(req.params.id);
     const managerId = req?.user?.id;
 
-    if (Number.isNaN(requestId)) {
+    if (!Number.isInteger(requestId)) {
       return res.status(400).json({
         message: "Invalid request ID",
       });
