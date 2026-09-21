@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { prisma } from "../config/prisma.ts";
+import { findOverlappingRequests } from "../services/leaveRequest.service.ts";
 
 type LeaveBalanceRow = {
   id: number;
@@ -71,7 +72,12 @@ export async function getManagerRequestById(req: Request, res: Response) {
       });
     }
 
-    return res.status(200).json(request);
+    const overlappingRequests = await findOverlappingRequests(requestId);
+
+    return res.status(200).json({
+      ...request,
+      overlappingRequests,
+    });
   } catch (error) {
     console.error(error);
 
