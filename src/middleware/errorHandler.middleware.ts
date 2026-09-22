@@ -8,7 +8,7 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
-  console.error(err.stack);
+  req.log?.error({ err }, "Unhandled error");
   res.status(500).json({
     error: "Internal Server Error",
     message: err.message,

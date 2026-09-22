@@ -21,6 +21,7 @@ enum LeaveRequestStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 enum LeaveDecisionAction {
@@ -90,6 +91,8 @@ model LeaveRequest {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id])
   decisions LeaveDecision[]
+
+  @@index([userId, startDate, endDate])
 }
 
 model LeaveDecision {

@@ -1,0 +1,13 @@
+node_modules
+generated
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.log
+.vscode
+.idea
+.agents
+.claude
+.windsurf

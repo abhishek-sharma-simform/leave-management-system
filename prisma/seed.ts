@@ -28,6 +28,7 @@ async function main() {
   // Hash passwords
   const managerPassword = await bcrypt.hash("Manager@123", 10);
   const employeePassword = await bcrypt.hash("Employee@123", 10);
+  const employee2Password = await bcrypt.hash("Employee2@123", 10);
 
   // Create Manager
   const manager = await prisma.user.upsert({
@@ -58,6 +59,21 @@ async function main() {
     },
   });
 
+  // Create second Employee
+  const employee2 = await prisma.user.upsert({
+    where: {
+      email: "employee2@gmail.com",
+    },
+    update: {},
+    create: {
+      name: "Sam Employee",
+      email: "employee2@gmail.com",
+      passwordHash: employee2Password,
+      role: "EMPLOYEE",
+      managerId: manager.id,
+    },
+  });
+
   // Create Leave Types
   const leaveTypes = await Promise.all(
     LEAVE_TYPES.map((leaveType) =>
@@ -69,25 +85,27 @@ async function main() {
     ),
   );
 
-  // Grant the employee a starting balance for each leave type
+  // Grant each employee a starting balance for each leave type
   await Promise.all(
-    leaveTypes.map((leaveType) =>
-      prisma.leaveBalance.upsert({
-        where: {
-          userId_leaveTypeId_year: {
-            userId: employee.id,
+    [employee, employee2].flatMap((emp) =>
+      leaveTypes.map((leaveType) =>
+        prisma.leaveBalance.upsert({
+          where: {
+            userId_leaveTypeId_year: {
+              userId: emp.id,
+              leaveTypeId: leaveType.id,
+              year: currentYear,
+            },
+          },
+          update: {},
+          create: {
+            userId: emp.id,
             leaveTypeId: leaveType.id,
             year: currentYear,
+            allocatedDays: leaveType.defaultAllowanceDays,
           },
-        },
-        update: {},
-        create: {
-          userId: employee.id,
-          leaveTypeId: leaveType.id,
-          year: currentYear,
-          allocatedDays: leaveType.defaultAllowanceDays,
-        },
-      }),
+        }),
+      ),
     ),
   );
 
@@ -103,6 +121,12 @@ async function main() {
       email: employee.email,
       role: employee.role,
       managerId: employee.managerId,
+    },
+    employee2: {
+      id: employee2.id,
+      email: employee2.email,
+      role: employee2.role,
+      managerId: employee2.managerId,
     },
     leaveTypes: leaveTypes.map((leaveType) => leaveType.name),
   });
