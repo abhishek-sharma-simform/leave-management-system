@@ -1,9 +1,14 @@
 import express from "express";
+import cors from "cors";
 import routes from "./routes/index.ts";
 import { notFoundHandler } from "./middleware/notFound.middleware.ts";
 import { errorHandler } from "./middleware/errorHandler.middleware.ts";
 
 const app = express();
+
+// Allow browser-based clients (e.g. a frontend on a different origin) to call
+// this API. Wide open for POC purposes — no origin allowlist yet.
+app.use(cors());
 
 // Parse incoming JSON request bodies into req.body
 app.use(express.json());
