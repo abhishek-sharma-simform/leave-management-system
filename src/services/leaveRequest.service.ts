@@ -8,6 +8,42 @@ type LeaveRequestUpdateInput = {
   reason?: string | null;
 };
 
+type ListMyLeaveRequestsOptions = {
+  page: number;
+  limit: number;
+  sortBy: "createdAt" | "startDate" | "status";
+  sortOrder: "asc" | "desc";
+  status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+};
+
+export async function getMyLeaveRequests(
+  userId: number,
+  { page, limit, sortBy, sortOrder, status }: ListMyLeaveRequestsOptions,
+) {
+  const where = { userId, ...(status ? { status } : {}) };
+
+  const [data, total] = await Promise.all([
+    prisma.leaveRequest.findMany({
+      where,
+      include: { leaveType: true },
+      orderBy: { [sortBy]: sortOrder },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.leaveRequest.count({ where }),
+  ]);
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+    },
+  };
+}
+
 export async function updateLeaveRequest(
   userId: number,
   requestId: number,

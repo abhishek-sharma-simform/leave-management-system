@@ -30,6 +30,8 @@ cp .env.example .env
 | `PORT`         | Port the API listens on (defaults to `5000` if unset).                                                                   |
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://user:pass@localhost:5432/leave_management`.                             |
 | `JWT_SECRET`   | Secret used to sign/verify login JWTs. Any non-empty string works locally; use a long random value in a real deployment. |
+| `NODE_ENV`     | `development` \| `production` \| `test`. Controls log formatting and defaults (defaults to `development`).               |
+| `LOG_LEVEL`    | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`. Defaults to `debug` in development, `info` in production.            |
 
 ### 4. Create the database schema
 
@@ -93,15 +95,43 @@ All routes are mounted under `/api/v1`.
 | POST   | `/auth/login`                   | —                      | Log in, returns a JWT                                  |
 | GET    | `/leave-types`                  | any authenticated      | List leave types                                       |
 | POST   | `/leave-requests`               | any authenticated      | Create a leave request                                 |
-| GET    | `/leave-requests/me`            | any authenticated      | List the caller's own leave requests                   |
+| GET    | `/leave-requests/me`            | any authenticated      | List the caller's own leave requests (paginated, see below) |
 | PATCH  | `/leave-requests/me/:id`        | any authenticated      | Edit one of the caller's own **pending** requests      |
 | POST   | `/leave-requests/me/:id/cancel` | any authenticated      | Cancel one of the caller's own **pending** requests    |
 | GET    | `/leave-requests/:id/history`   | owner or their manager | View a request's approve/reject decision history       |
-| GET    | `/manager/requests`             | MANAGER                | List pending requests for the manager's direct reports |
+| GET    | `/leave-balances/me?year=`      | any authenticated      | View the caller's own leave balances (default: current year) |
+| GET    | `/manager/requests`             | MANAGER                | List pending requests for the manager's direct reports (paginated) |
 | GET    | `/manager/requests/:id`         | MANAGER                | View one report's request, plus overlapping team leave |
 | POST   | `/manager/requests/:id/approve` | MANAGER                | Approve a pending request                              |
 | POST   | `/manager/requests/:id/reject`  | MANAGER                | Reject a pending request (requires a `reason`)         |
 | GET    | `/calendar?month=&year=`        | MANAGER                | Team's approved leave for a given month                |
+
+### Pagination, sorting and filtering
+
+`GET /leave-requests/me` and `GET /manager/requests` accept `page` (default `1`),
+`limit` (default `20`, max `100`), `sortBy` and `sortOrder` (`asc`|`desc`, default
+`desc`) query params, and return `{ data: [...], meta: { page, limit, total,
+totalPages } }` instead of a bare array. `sortBy` is restricted to an allowlist
+per endpoint (`createdAt`|`startDate`|`status` for `/leave-requests/me`,
+`createdAt`|`startDate` for `/manager/requests`) — an out-of-allowlist value is
+rejected with 400 rather than being passed through to the database. `/leave-requests/me`
+additionally accepts a `status` filter (`PENDING`|`APPROVED`|`REJECTED`|`CANCELLED`).
+`GET /calendar` is intentionally not paginated — a single month's results are
+already bounded.
+
+**This changed the response shape of `/leave-requests/me` and `/manager/requests`
+from a plain array to `{ data, meta }` — a breaking change for any existing
+client of those two endpoints.**
+
+### Request validation
+
+All request bodies, route params, and query params are validated with
+[Zod](https://zod.dev) schemas (`src/validators/`) via a `validate(schema, source)`
+middleware (`src/middleware/validate.middleware.ts`), rather than hand-rolled
+per-field checks. A validation failure returns `400` with
+`{ message: "Validation failed", errors: [{ path, message }] }`. `POST /auth/login`
+is the one remaining hand-validated endpoint (a trivial two-field check, not
+worth a dedicated schema).
 
 ## Documented assumptions
 
@@ -184,13 +214,63 @@ current types) but is not yet read by any request/approval code path — every r
 currently goes through manager approval regardless of this flag. It's schema groundwork for
 an auto-approve path, not an enforced rule yet (see Known gaps).
 
+## Testing
+
+Automated tests use [Vitest](https://vitest.dev) (plus `supertest` for API-level
+requests against the exported `src/app.ts`, without starting a real listening
+server). Tests run against a **separate** Postgres database — never your dev
+database — that gets truncated between tests.
+
+```bash
+cp .env.test.example .env.test   # fill in a DATABASE_URL pointing at a *test* database
+DATABASE_URL=<your test db url> npx prisma migrate deploy   # one-time, or after new migrations
+npm test              # run once
+npm run test:watch    # watch mode
+npm run test:coverage # with a coverage report
+```
+
+Coverage: unit tests for `calculateLeaveDays` (`tests/unit/`), service-layer tests
+for `leaveRequest.service.ts`'s business rules and error codes (`tests/services/`),
+and full API tests (`tests/api/`) covering auth, leave-request CRUD/cancel/history,
+leave types, leave balances, manager list/get/approve/reject, and the team
+calendar — including a dedicated regression test that fires two concurrent
+`approve` calls against a balance that can only satisfy one, asserting the
+`SELECT ... FOR UPDATE` guard (see below) prevents an overdraw.
+
+## Structured logging
+
+Logging uses [pino](https://getpino.io) + `pino-http` (`src/config/logger.ts`,
+`src/middleware/requestLogger.middleware.ts`). Every request gets a UUID
+correlation id (`req.id`, echoed back as an `X-Request-Id` response header) and
+a bound child logger (`req.log`) that every log line for that request is
+written through, plus an automatic access-log line (method/path/status/duration)
+per request. Output is pretty-printed in development and raw NDJSON in
+production (`NODE_ENV`/`LOG_LEVEL` — see env vars above).
+
+## Docker
+
+```bash
+docker compose up -d db
+docker compose run --rm api npx prisma migrate deploy
+docker compose run --rm api npx prisma db seed   # optional, first run only
+docker compose up api
+```
+
+The API image runs `node src/server.ts` directly against source (there's no
+`dist/` build step to bake in — see Runtime model above), with `npx prisma
+generate` run at image-build time. `db`'s host port is mapped to `5433` (not the
+default `5432`) to avoid colliding with a locally-installed Postgres.
+
 ## Known gaps
 
-- No input validation library (zod, etc.) — controllers validate manually, field by field.
 - No rate limiting on `/auth/login`.
 - `npm run build` / `npm start` don't currently produce a runnable `dist/` (`tsc` has
-  `noEmit: true`); use `npm run dev` locally.
-- No endpoint to view, create, or roll over a `LeaveBalance` — balances only exist for
-  whatever `prisma/seed.ts` (or manual DB access) has created.
+  `noEmit: true`); use `npm run dev` locally (or the Docker image, which runs
+  directly against source the same way).
+- No endpoint to create or roll over a `LeaveBalance` (viewing one is now supported —
+  see `GET /leave-balances/me` above) — new balance rows still only come from
+  `prisma/seed.ts` or manual DB access.
 - `LeaveType.requiresApproval` is not read anywhere yet — all leave types currently require
   manager approval in practice, regardless of this flag's value.
+- No CI pipeline runs the test suite automatically yet — `npm test` is documented but
+  manual.

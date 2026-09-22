@@ -14,26 +14,45 @@ type LeaveBalanceRow = {
 export async function getManagerRequests(req: Request, res: Response) {
   try {
     const managerId = req?.user?.id;
+    const { page, limit, sortBy, sortOrder } = req.query as unknown as {
+      page: number;
+      limit: number;
+      sortBy: "createdAt" | "startDate";
+      sortOrder: "asc" | "desc";
+    };
 
-    const requests = await prisma.leaveRequest.findMany({
-      where: {
-        status: "PENDING",
-        user: {
-          managerId,
+    const where = {
+      status: "PENDING" as const,
+      user: {
+        managerId,
+      },
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.leaveRequest.findMany({
+        where,
+        include: {
+          user: true,
+          leaveType: true,
         },
-      },
-      include: {
-        user: true,
-        leaveType: true,
-      },
-      orderBy: {
-        createdAt: "desc",
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.leaveRequest.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
       },
     });
-
-    return res.status(200).json(requests);
   } catch (error) {
-    console.error(error);
+    req.log?.error({ err: error }, "Get manager requests error");
 
     return res.status(500).json({
       message: "Failed to fetch manager requests",
@@ -43,14 +62,8 @@ export async function getManagerRequests(req: Request, res: Response) {
 
 export async function getManagerRequestById(req: Request, res: Response) {
   try {
-    const requestId = Number(req.params.id);
+    const requestId = (req.params as unknown as { id: number }).id;
     const managerId = req?.user?.id;
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        message: "Invalid request ID",
-      });
-    }
 
     const request = await prisma.leaveRequest.findFirst({
       where: {
@@ -79,7 +92,7 @@ export async function getManagerRequestById(req: Request, res: Response) {
       overlappingRequests,
     });
   } catch (error) {
-    console.error(error);
+    req.log?.error({ err: error }, "Get manager request by id error");
 
     return res.status(500).json({
       message: "Failed to fetch leave request",
@@ -89,14 +102,8 @@ export async function getManagerRequestById(req: Request, res: Response) {
 
 export async function approveLeaveRequest(req: Request, res: Response) {
   try {
-    const requestId = Number(req.params.id);
+    const requestId = (req.params as unknown as { id: number }).id;
     const managerId = req?.user?.id;
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        message: "Invalid request ID",
-      });
-    }
 
     const request = await prisma.leaveRequest.findUnique({
       where: {
@@ -199,7 +206,7 @@ export async function approveLeaveRequest(req: Request, res: Response) {
       message: "Leave request approved successfully",
     });
   } catch (error) {
-    console.error(error);
+    req.log?.error({ err: error }, "Approve leave request error");
 
     if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
       return res.status(400).json({
@@ -221,22 +228,9 @@ export async function approveLeaveRequest(req: Request, res: Response) {
 
 export async function rejectLeaveRequest(req: Request, res: Response) {
   try {
-    const requestId = Number(req.params.id);
+    const requestId = (req.params as unknown as { id: number }).id;
     const managerId = req?.user?.id;
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        message: "Invalid request ID",
-      });
-    }
-
-    const { reason } = req.body ?? {};
-
-    if (typeof reason !== "string" || reason.trim().length === 0) {
-      return res.status(400).json({
-        message: "Rejection reason is required",
-      });
-    }
+    const { reason } = req.body as { reason: string };
 
     const request = await prisma.leaveRequest.findUnique({
       where: {
@@ -286,7 +280,7 @@ export async function rejectLeaveRequest(req: Request, res: Response) {
           requestId: request.id,
           actorId: managerId,
           action: "REJECTED",
-          reason: reason.trim(),
+          reason,
         },
       });
     });
@@ -295,7 +289,7 @@ export async function rejectLeaveRequest(req: Request, res: Response) {
       message: "Leave request rejected successfully",
     });
   } catch (error) {
-    console.error(error);
+    req.log?.error({ err: error }, "Reject leave request error");
 
     return res.status(500).json({
       message: "Failed to reject leave request",

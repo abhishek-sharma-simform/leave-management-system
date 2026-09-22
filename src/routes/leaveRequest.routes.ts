@@ -7,17 +7,50 @@ import {
   getLeaveRequestHistoryController,
 } from "../controllers/leaveRequest.controller.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
+import { validate } from "../middleware/validate.middleware.ts";
+import {
+  createLeaveRequestBodySchema,
+  updateLeaveRequestBodySchema,
+  leaveRequestIdParamsSchema,
+  listMyRequestsQuerySchema,
+} from "../validators/leaveRequest.validator.ts";
 
 const router = Router();
 
-router.post("/", authMiddleware, createLeaveRequest);
+router.post(
+  "/",
+  authMiddleware,
+  validate(createLeaveRequestBodySchema, "body"),
+  createLeaveRequest,
+);
 
-router.get("/me", authMiddleware, getMyLeaveRequests);
+router.get(
+  "/me",
+  authMiddleware,
+  validate(listMyRequestsQuerySchema, "query"),
+  getMyLeaveRequests,
+);
 
-router.patch("/me/:id", authMiddleware, updateMyLeaveRequest);
+router.patch(
+  "/me/:id",
+  authMiddleware,
+  validate(leaveRequestIdParamsSchema, "params"),
+  validate(updateLeaveRequestBodySchema, "body"),
+  updateMyLeaveRequest,
+);
 
-router.post("/me/:id/cancel", authMiddleware, cancelMyLeaveRequest);
+router.post(
+  "/me/:id/cancel",
+  authMiddleware,
+  validate(leaveRequestIdParamsSchema, "params"),
+  cancelMyLeaveRequest,
+);
 
-router.get("/:id/history", authMiddleware, getLeaveRequestHistoryController);
+router.get(
+  "/:id/history",
+  authMiddleware,
+  validate(leaveRequestIdParamsSchema, "params"),
+  getLeaveRequestHistoryController,
+);
 
 export default router;

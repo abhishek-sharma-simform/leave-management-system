@@ -5,13 +5,11 @@ import {
   updateLeaveRequest,
   cancelLeaveRequest,
   getLeaveRequestHistory,
+  getMyLeaveRequests as getMyLeaveRequestsService,
 } from "../services/leaveRequest.service.ts";
 
 export async function createLeaveRequest(req: Request, res: Response) {
   try {
-    const { leaveTypeId, startDate, endDate, reason } = req.body;
-
-    // 1. Get user ID from authenticated user
     if (!req.user) {
       return res.status(401).json({
         error: "Authentication required",
@@ -19,61 +17,17 @@ export async function createLeaveRequest(req: Request, res: Response) {
     }
 
     const userId = req.user.id;
+    const { leaveTypeId, startDate, endDate, reason } = req.body as {
+      leaveTypeId: number;
+      startDate: Date;
+      endDate: Date;
+      reason?: string | null;
+    };
 
-    // 2. Validate leaveTypeId
-    if (!leaveTypeId) {
-      return res.status(400).json({
-        error: "leaveTypeId is required",
-      });
-    }
-
-    const leaveTypeIdNum = Number(leaveTypeId);
-
-    if (!Number.isInteger(leaveTypeIdNum) || leaveTypeIdNum <= 0) {
-      return res.status(400).json({
-        error: "leaveTypeId must be a positive integer",
-      });
-    }
-
-    // 3. Validate dates are provided
-    if (!startDate || !endDate) {
-      return res.status(400).json({
-        error: "startDate and endDate are required",
-      });
-    }
-
-    // 3b. Validate reason type, if provided
-    if (reason !== undefined && reason !== null && typeof reason !== "string") {
-      return res.status(400).json({
-        error: "reason must be a string",
-      });
-    }
-
-    // 4. Convert strings to Date objects
-    const parsedStartDate = new Date(startDate);
-    const parsedEndDate = new Date(endDate);
-
-    // 5. Validate dates
-    if (
-      Number.isNaN(parsedStartDate.getTime()) ||
-      Number.isNaN(parsedEndDate.getTime())
-    ) {
-      return res.status(400).json({
-        error: "startDate and endDate must be valid dates",
-      });
-    }
-
-    // 6. Validate startDate <= endDate
-    if (parsedStartDate > parsedEndDate) {
-      return res.status(400).json({
-        error: "startDate must be before or equal to endDate",
-      });
-    }
-
-    // 7. Check whether leave type exists
+    // Check whether leave type exists
     const leaveType = await prisma.leaveType.findUnique({
       where: {
-        id: leaveTypeIdNum,
+        id: leaveTypeId,
       },
     });
 
@@ -83,10 +37,10 @@ export async function createLeaveRequest(req: Request, res: Response) {
       });
     }
 
-    // 8. Calculate requested leave days
-    const requestedDays = calculateLeaveDays(parsedStartDate, parsedEndDate);
+    // Calculate requested leave days
+    const requestedDays = calculateLeaveDays(startDate, endDate);
 
-    // 9. Preliminary balance check
+    // Preliminary balance check
     if (leaveType.drawsFromBalance) {
       const currentYear = new Date().getFullYear();
 
@@ -115,23 +69,22 @@ export async function createLeaveRequest(req: Request, res: Response) {
       }
     }
 
-    // 10. Create leave request
+    // Create leave request
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
         userId,
         leaveTypeId: leaveType.id,
-        startDate: parsedStartDate,
-        endDate: parsedEndDate,
+        startDate,
+        endDate,
         daysRequested: requestedDays,
         note: reason,
         status: "PENDING",
       },
     });
 
-    // 11. Return created request
     return res.status(201).json(leaveRequest);
   } catch (error) {
-    console.error("Create leave request error:", error);
+    req.log?.error({ err: error }, "Create leave request error");
 
     return res.status(500).json({
       error: "Failed to create leave request",
@@ -142,22 +95,25 @@ export async function createLeaveRequest(req: Request, res: Response) {
 export async function getMyLeaveRequests(req: Request, res: Response) {
   try {
     const userId = req?.user?.id;
+    const { page, limit, sortBy, sortOrder, status } = req.query as unknown as {
+      page: number;
+      limit: number;
+      sortBy: "createdAt" | "startDate" | "status";
+      sortOrder: "asc" | "desc";
+      status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+    };
 
-    const leaveRequests = await prisma.leaveRequest.findMany({
-      where: {
-        userId,
-      },
-      include: {
-        leaveType: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+    const result = await getMyLeaveRequestsService(userId!, {
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+      status,
     });
 
-    return res.status(200).json(leaveRequests);
+    return res.status(200).json(result);
   } catch (error) {
-    console.error("Get my leave requests error:", error);
+    req.log?.error({ err: error }, "Get my leave requests error");
 
     return res.status(500).json({
       error: "Failed to fetch leave requests",
@@ -173,15 +129,13 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
       });
     }
 
-    const requestId = Number(req.params.id);
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        error: "Invalid request ID",
-      });
-    }
-
-    const { leaveTypeId, startDate, endDate, reason } = req.body ?? {};
+    const requestId = (req.params as unknown as { id: number }).id;
+    const { leaveTypeId, startDate, endDate, reason } = req.body as {
+      leaveTypeId?: number;
+      startDate?: Date;
+      endDate?: Date;
+      reason?: string | null;
+    };
 
     const updates: {
       leaveTypeId?: number;
@@ -191,45 +145,15 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
     } = {};
 
     if (leaveTypeId !== undefined) {
-      const leaveTypeIdNum = Number(leaveTypeId);
-
-      if (!Number.isInteger(leaveTypeIdNum) || leaveTypeIdNum <= 0) {
-        return res.status(400).json({
-          error: "leaveTypeId must be a positive integer",
-        });
-      }
-
-      updates.leaveTypeId = leaveTypeIdNum;
+      updates.leaveTypeId = leaveTypeId;
     }
 
     if (startDate !== undefined) {
-      const parsedStartDate = new Date(startDate);
-
-      if (Number.isNaN(parsedStartDate.getTime())) {
-        return res.status(400).json({
-          error: "startDate must be a valid date",
-        });
-      }
-
-      updates.startDate = parsedStartDate;
+      updates.startDate = startDate;
     }
 
     if (endDate !== undefined) {
-      const parsedEndDate = new Date(endDate);
-
-      if (Number.isNaN(parsedEndDate.getTime())) {
-        return res.status(400).json({
-          error: "endDate must be a valid date",
-        });
-      }
-
-      updates.endDate = parsedEndDate;
-    }
-
-    if (reason !== undefined && reason !== null && typeof reason !== "string") {
-      return res.status(400).json({
-        error: "reason must be a string",
-      });
+      updates.endDate = endDate;
     }
 
     if (reason !== undefined) {
@@ -278,7 +202,7 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
       }
     }
 
-    console.error("Update leave request error:", error);
+    req.log?.error({ err: error }, "Update leave request error");
 
     return res.status(500).json({
       error: "Failed to update leave request",
@@ -294,13 +218,7 @@ export async function cancelMyLeaveRequest(req: Request, res: Response) {
       });
     }
 
-    const requestId = Number(req.params.id);
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        error: "Invalid request ID",
-      });
-    }
+    const requestId = (req.params as unknown as { id: number }).id;
 
     const cancelled = await cancelLeaveRequest(req.user.id, requestId);
 
@@ -328,7 +246,7 @@ export async function cancelMyLeaveRequest(req: Request, res: Response) {
       }
     }
 
-    console.error("Cancel leave request error:", error);
+    req.log?.error({ err: error }, "Cancel leave request error");
 
     return res.status(500).json({
       error: "Failed to cancel leave request",
@@ -347,13 +265,7 @@ export async function getLeaveRequestHistoryController(
       });
     }
 
-    const requestId = Number(req.params.id);
-
-    if (!Number.isInteger(requestId)) {
-      return res.status(400).json({
-        error: "Invalid request ID",
-      });
-    }
+    const requestId = (req.params as unknown as { id: number }).id;
 
     const request = await getLeaveRequestHistory(
       req.user.id,
@@ -396,7 +308,7 @@ export async function getLeaveRequestHistoryController(
       }
     }
 
-    console.error("Get leave request history error:", error);
+    req.log?.error({ err: error }, "Get leave request history error");
 
     return res.status(500).json({
       error: "Failed to fetch leave request history",
