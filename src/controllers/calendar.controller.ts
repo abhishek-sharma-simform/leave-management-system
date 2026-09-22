@@ -32,7 +32,7 @@ export async function getCalendar(req: Request, res: Response) {
 
     return res.status(200).json(leaveRequests);
   } catch (error) {
-    req.log?.error({ err: error }, "Get team calendar error");
+    console.error("Get team calendar error:", error);
 
     return res.status(500).json({
       message: "Failed to fetch team calendar",

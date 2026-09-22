@@ -2,13 +2,8 @@ import express from "express";
 import routes from "./routes/index.ts";
 import { notFoundHandler } from "./middleware/notFound.middleware.ts";
 import { errorHandler } from "./middleware/errorHandler.middleware.ts";
-import { requestLogger } from "./middleware/requestLogger.middleware.ts";
 
 const app = express();
-
-// First, so req.id/req.log exist for everything downstream, including
-// JSON-parse errors, and so every request gets an access log line.
-app.use(requestLogger);
 
 // Parse incoming JSON request bodies into req.body
 app.use(express.json());

@@ -52,7 +52,7 @@ export async function getManagerRequests(req: Request, res: Response) {
       },
     });
   } catch (error) {
-    req.log?.error({ err: error }, "Get manager requests error");
+    console.error("Get manager requests error:", error);
 
     return res.status(500).json({
       message: "Failed to fetch manager requests",
@@ -92,7 +92,7 @@ export async function getManagerRequestById(req: Request, res: Response) {
       overlappingRequests,
     });
   } catch (error) {
-    req.log?.error({ err: error }, "Get manager request by id error");
+    console.error("Get manager request by id error:", error);
 
     return res.status(500).json({
       message: "Failed to fetch leave request",
@@ -206,7 +206,7 @@ export async function approveLeaveRequest(req: Request, res: Response) {
       message: "Leave request approved successfully",
     });
   } catch (error) {
-    req.log?.error({ err: error }, "Approve leave request error");
+    console.error("Approve leave request error:", error);
 
     if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
       return res.status(400).json({
@@ -289,7 +289,7 @@ export async function rejectLeaveRequest(req: Request, res: Response) {
       message: "Leave request rejected successfully",
     });
   } catch (error) {
-    req.log?.error({ err: error }, "Reject leave request error");
+    console.error("Reject leave request error:", error);
 
     return res.status(500).json({
       message: "Failed to reject leave request",

@@ -84,7 +84,7 @@ export async function createLeaveRequest(req: Request, res: Response) {
 
     return res.status(201).json(leaveRequest);
   } catch (error) {
-    req.log?.error({ err: error }, "Create leave request error");
+    console.error("Create leave request error:", error);
 
     return res.status(500).json({
       error: "Failed to create leave request",
@@ -113,7 +113,7 @@ export async function getMyLeaveRequests(req: Request, res: Response) {
 
     return res.status(200).json(result);
   } catch (error) {
-    req.log?.error({ err: error }, "Get my leave requests error");
+    console.error("Get my leave requests error:", error);
 
     return res.status(500).json({
       error: "Failed to fetch leave requests",
@@ -202,7 +202,7 @@ export async function updateMyLeaveRequest(req: Request, res: Response) {
       }
     }
 
-    req.log?.error({ err: error }, "Update leave request error");
+    console.error("Update leave request error:", error);
 
     return res.status(500).json({
       error: "Failed to update leave request",
@@ -246,7 +246,7 @@ export async function cancelMyLeaveRequest(req: Request, res: Response) {
       }
     }
 
-    req.log?.error({ err: error }, "Cancel leave request error");
+    console.error("Cancel leave request error:", error);
 
     return res.status(500).json({
       error: "Failed to cancel leave request",
@@ -308,7 +308,7 @@ export async function getLeaveRequestHistoryController(
       }
     }
 
-    req.log?.error({ err: error }, "Get leave request history error");
+    console.error("Get leave request history error:", error);
 
     return res.status(500).json({
       error: "Failed to fetch leave request history",

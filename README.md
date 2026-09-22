@@ -30,8 +30,7 @@ cp .env.example .env
 | `PORT`         | Port the API listens on (defaults to `5000` if unset).                                                                   |
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://user:pass@localhost:5432/leave_management`.                             |
 | `JWT_SECRET`   | Secret used to sign/verify login JWTs. Any non-empty string works locally; use a long random value in a real deployment. |
-| `NODE_ENV`     | `development` \| `production` \| `test`. Controls log formatting and defaults (defaults to `development`).               |
-| `LOG_LEVEL`    | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`. Defaults to `debug` in development, `info` in production.            |
+| `NODE_ENV`     | `development` \| `production` \| `test`. Controls which env file loads (defaults to `development`).                      |
 
 ### 4. Create the database schema
 
@@ -237,15 +236,13 @@ calendar — including a dedicated regression test that fires two concurrent
 `approve` calls against a balance that can only satisfy one, asserting the
 `SELECT ... FOR UPDATE` guard (see below) prevents an overdraw.
 
-## Structured logging
+## Logging
 
-Logging uses [pino](https://getpino.io) + `pino-http` (`src/config/logger.ts`,
-`src/middleware/requestLogger.middleware.ts`). Every request gets a UUID
-correlation id (`req.id`, echoed back as an `X-Request-Id` response header) and
-a bound child logger (`req.log`) that every log line for that request is
-written through, plus an automatic access-log line (method/path/status/duration)
-per request. Output is pretty-printed in development and raw NDJSON in
-production (`NODE_ENV`/`LOG_LEVEL` — see env vars above).
+Logging is plain `console.log`/`console.error` — no logging library. `server.ts` logs
+the startup line with `console.log`; every controller's `catch` block and the
+top-level `errorHandler` middleware log unexpected errors with `console.error`.
+There's no correlation id or structured/JSON log output — kept intentionally
+simple for this POC.
 
 ## Docker
 

@@ -33,7 +33,6 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/leave_management
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
-      LOG_LEVEL: ${LOG_LEVEL:-info}
 
 volumes:
   pgdata:
