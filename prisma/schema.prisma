@@ -11,3 +11,98 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaveDecisionAction {
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  name         String
+  email        String @unique
+  passwordHash String
+  role         Role
+
+  managerId Int?
+  manager   User?  @relation("UserManager", fields: [managerId], references: [id])
+  employees User[] @relation("UserManager")
+
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[]
+  decisions     LeaveDecision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveType {
+  id                   Int     @id @default(autoincrement())
+  name                 String  @unique
+  requiresApproval     Boolean
+  drawsFromBalance     Boolean
+  defaultAllowanceDays Int
+
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeaveBalance {
+  id            Int @id @default(autoincrement())
+  userId        Int
+  leaveTypeId   Int
+  year          Int
+  allocatedDays Int
+  usedDays      Int @default(0)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id            Int                @id @default(autoincrement())
+  userId        Int
+  leaveTypeId   Int
+  startDate     DateTime
+  endDate       DateTime
+  daysRequested Int
+  status        LeaveRequestStatus @default(PENDING)
+  note          String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id])
+  decisions LeaveDecision[]
+
+  @@index([userId, startDate, endDate])
+}
+
+model LeaveDecision {
+  id        Int                 @id @default(autoincrement())
+  requestId Int
+  actorId   Int
+  action    LeaveDecisionAction
+  reason    String?
+  decidedAt DateTime            @default(now())
+
+  request LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User         @relation(fields: [actorId], references: [id])
+}
