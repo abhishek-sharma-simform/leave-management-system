@@ -3,7 +3,11 @@ import { getTeamCalendar } from "../services/calendar.service.ts";
 
 export async function getCalendar(req: Request, res: Response) {
   try {
-    const managerId = req?.user?.id;
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
 
     const { month: monthParam, year: yearParam } = req.query;
 
@@ -28,10 +32,21 @@ export async function getCalendar(req: Request, res: Response) {
       });
     }
 
-    const leaveRequests = await getTeamCalendar(managerId!, month, year);
+    const leaveRequests = await getTeamCalendar(
+      req.user.id,
+      req.user.role,
+      month,
+      year,
+    );
 
     return res.status(200).json(leaveRequests);
   } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
     console.error("Get team calendar error:", error);
 
     return res.status(500).json({

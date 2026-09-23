@@ -47,7 +47,7 @@ describe("GET /api/v1/leave-requests/team-on-leave", () => {
     expect(res.body.teammatesOnLeave).toEqual([]);
   });
 
-  it("returns overlapping APPROVED and PENDING requests from teammates under the same manager", async () => {
+  it("returns overlapping APPROVED requests from teammates under the same manager", async () => {
     const manager = await createUser({ role: "MANAGER" });
     const otherManager = await createUser({ role: "MANAGER" });
     const caller = await createUser({ managerId: manager.id });
@@ -64,8 +64,8 @@ describe("GET /api/v1/leave-requests/team-on-leave", () => {
       daysRequested: 2,
       status: "APPROVED",
     });
-    // Teammate, pending, overlaps — should be included.
-    const overlappingPending = await createLeaveRequest({
+    // Teammate, pending, overlaps — should be excluded (only APPROVED counts).
+    await createLeaveRequest({
       userId: teammate.id,
       leaveTypeId: leaveType.id,
       startDate: new Date(2026, 4, 14),
@@ -117,19 +117,10 @@ describe("GET /api/v1/leave-requests/team-on-leave", () => {
       .set(authHeader(caller.id, "EMPLOYEE"));
 
     expect(res.status).toBe(200);
-    expect(res.body.teammatesOnLeave).toHaveLength(2);
-    const returnedRequestDates = res.body.teammatesOnLeave.map(
-      (entry: { startDate: string }) => entry.startDate,
+    expect(res.body.teammatesOnLeave).toHaveLength(1);
+    expect(res.body.teammatesOnLeave[0].startDate).toBe(
+      overlappingApproved.startDate.toISOString(),
     );
-    expect(returnedRequestDates).toEqual(
-      [overlappingApproved, overlappingPending].map((r) =>
-        r.startDate.toISOString(),
-      ),
-    );
-    expect(
-      res.body.teammatesOnLeave.every(
-        (entry: { userId: number }) => entry.userId === teammate.id,
-      ),
-    ).toBe(true);
+    expect(res.body.teammatesOnLeave[0].userId).toBe(teammate.id);
   });
 });

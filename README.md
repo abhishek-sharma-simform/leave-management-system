@@ -104,7 +104,7 @@ All routes are mounted under `/api/v1`.
 | GET    | `/manager/requests/:id`         | MANAGER                | View one report's request, plus overlapping team leave |
 | POST   | `/manager/requests/:id/approve` | MANAGER                | Approve a pending request                              |
 | POST   | `/manager/requests/:id/reject`  | MANAGER                | Reject a pending request (requires a `reason`)         |
-| GET    | `/calendar?month=&year=`        | MANAGER                | Team's approved leave for a given month                |
+| GET    | `/calendar?month=&year=`        | any authenticated      | Caller's team's approved leave for a given month (see below) |
 
 ### Pagination, sorting and filtering
 
@@ -123,18 +123,24 @@ already bounded.
 from a plain array to `{ data, meta }` — a breaking change for any existing
 client of those two endpoints.**
 
+### Calendar's "team" resolution
+
+`GET /calendar` is open to any authenticated user (not just managers), and "team" is
+resolved differently depending on role: a `MANAGER` sees their own direct reports
+(unchanged from the original manager-only behavior), while an `EMPLOYEE` sees everyone
+sharing their own manager — which includes the caller's own approved leave alongside
+their teammates'. An employee with no `managerId` set gets `[]`, not an error.
+
 ### Team-on-leave lookup
 
 `GET /leave-requests/team-on-leave?startDate=&endDate=` is meant to back a leave-request
 form's date picker — before submitting, a caller can check who else on their team is
 already out for the dates they're considering. It looks up the caller's `managerId` and
-returns every other user sharing that same manager whose `APPROVED` or `PENDING` leave
-request overlaps `[startDate, endDate]` (inclusive), shaped as `{ startDate, endDate,
+returns every other user sharing that same manager whose `APPROVED` leave request
+overlaps `[startDate, endDate]` (inclusive), shaped as `{ startDate, endDate,
 teammatesOnLeave: [{ userId, name, email, leaveType, startDate, endDate, status }] }`.
-`PENDING` requests are included (not just `APPROVED`) so a caller also sees leave that's
-still awaiting a decision, mirroring the overlap check `/manager/requests/:id` already
-does for managers. A caller with no manager (or no teammates) gets an empty array, not an
-error.
+Only `APPROVED` requests count — a still-pending teammate request isn't shown. A caller
+with no manager (or no teammates) gets an empty array, not an error.
 
 ### Request validation
 
