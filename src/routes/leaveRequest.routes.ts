@@ -5,6 +5,7 @@ import {
   updateMyLeaveRequest,
   cancelMyLeaveRequest,
   getLeaveRequestHistoryController,
+  getTeamOnLeaveController,
 } from "../controllers/leaveRequest.controller.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import { validate } from "../middleware/validate.middleware.ts";
@@ -13,6 +14,7 @@ import {
   updateLeaveRequestBodySchema,
   leaveRequestIdParamsSchema,
   listMyRequestsQuerySchema,
+  teamOnLeaveQuerySchema,
 } from "../validators/leaveRequest.validator.ts";
 
 const router = Router();
@@ -44,6 +46,13 @@ router.post(
   authMiddleware,
   validate(leaveRequestIdParamsSchema, "params"),
   cancelMyLeaveRequest,
+);
+
+router.get(
+  "/team-on-leave",
+  authMiddleware,
+  validate(teamOnLeaveQuerySchema, "query"),
+  getTeamOnLeaveController,
 );
 
 router.get(

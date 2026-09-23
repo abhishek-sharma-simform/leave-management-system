@@ -97,6 +97,7 @@ All routes are mounted under `/api/v1`.
 | GET    | `/leave-requests/me`            | any authenticated      | List the caller's own leave requests (paginated, see below) |
 | PATCH  | `/leave-requests/me/:id`        | any authenticated      | Edit one of the caller's own **pending** requests      |
 | POST   | `/leave-requests/me/:id/cancel` | any authenticated      | Cancel one of the caller's own **pending** requests    |
+| GET    | `/leave-requests/team-on-leave?startDate=&endDate=` | any authenticated | Teammates (same manager) on leave in a date range |
 | GET    | `/leave-requests/:id/history`   | owner or their manager | View a request's approve/reject decision history       |
 | GET    | `/leave-balances/me?year=`      | any authenticated      | View the caller's own leave balances (default: current year) |
 | GET    | `/manager/requests`             | MANAGER                | List pending requests for the manager's direct reports (paginated) |
@@ -121,6 +122,19 @@ already bounded.
 **This changed the response shape of `/leave-requests/me` and `/manager/requests`
 from a plain array to `{ data, meta }` — a breaking change for any existing
 client of those two endpoints.**
+
+### Team-on-leave lookup
+
+`GET /leave-requests/team-on-leave?startDate=&endDate=` is meant to back a leave-request
+form's date picker — before submitting, a caller can check who else on their team is
+already out for the dates they're considering. It looks up the caller's `managerId` and
+returns every other user sharing that same manager whose `APPROVED` or `PENDING` leave
+request overlaps `[startDate, endDate]` (inclusive), shaped as `{ startDate, endDate,
+teammatesOnLeave: [{ userId, name, email, leaveType, startDate, endDate, status }] }`.
+`PENDING` requests are included (not just `APPROVED`) so a caller also sees leave that's
+still awaiting a decision, mirroring the overlap check `/manager/requests/:id` already
+does for managers. A caller with no manager (or no teammates) gets an empty array, not an
+error.
 
 ### Request validation
 

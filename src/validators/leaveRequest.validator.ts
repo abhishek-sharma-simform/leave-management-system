@@ -53,3 +53,16 @@ export const listMyRequestsQuerySchema = paginationQuerySchema
   .extend({
     status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
   });
+
+// Query params for GET /leave-requests/team-on-leave. Same startDate <= endDate
+// cross-field check as createLeaveRequestBodySchema, applied to a query instead
+// of a body.
+export const teamOnLeaveQuerySchema = z
+  .object({
+    startDate: z.coerce.date(),
+    endDate: z.coerce.date(),
+  })
+  .refine((data) => data.startDate <= data.endDate, {
+    message: "startDate must be before or equal to endDate",
+    path: ["startDate"],
+  });
