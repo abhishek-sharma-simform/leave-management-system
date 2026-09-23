@@ -14,15 +14,16 @@ type LeaveBalanceRow = {
 export async function getManagerRequests(req: Request, res: Response) {
   try {
     const managerId = req?.user?.id;
-    const { page, limit, sortBy, sortOrder } = req.query as unknown as {
+    const { page, limit, sortBy, sortOrder, status } = req.query as unknown as {
       page: number;
       limit: number;
       sortBy: "createdAt" | "startDate";
       sortOrder: "asc" | "desc";
+      status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
     };
 
     const where = {
-      status: "PENDING" as const,
+      ...(status ? { status } : {}),
       user: {
         managerId,
       },
@@ -56,6 +57,62 @@ export async function getManagerRequests(req: Request, res: Response) {
 
     return res.status(500).json({
       message: "Failed to fetch manager requests",
+    });
+  }
+}
+
+export async function getManagerDecisions(req: Request, res: Response) {
+  try {
+    const managerId = req?.user?.id;
+    const { page, limit, sortBy, sortOrder, action } = req.query as unknown as {
+      page: number;
+      limit: number;
+      sortBy: "decidedAt";
+      sortOrder: "asc" | "desc";
+      action?: "APPROVED" | "REJECTED";
+    };
+
+    const where = {
+      actorId: managerId,
+      ...(action ? { action } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.leaveDecision.findMany({
+        where,
+        include: {
+          request: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+              leaveType: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+        },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.leaveDecision.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+      },
+    });
+  } catch (error) {
+    console.error("Get manager decisions error:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch manager decisions",
     });
   }
 }

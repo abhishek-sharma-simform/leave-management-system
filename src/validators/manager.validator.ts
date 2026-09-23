@@ -16,9 +16,23 @@ export const rejectReasonBodySchema = z.object({
   reason: z.string().trim().min(1, "Rejection reason is required"),
 });
 
-// Query params for GET /manager/requests: shared pagination + sort schema,
-// sortBy restricted to createdAt|startDate. Deliberately has no `status`
-// filter — this list is hardcoded to PENDING requests by design.
-export const managerListQuerySchema = paginationQuerySchema.merge(
-  sortSchema(["createdAt", "startDate"], "createdAt"),
-);
+// Query params for GET /manager/requests: shared pagination + sort schema
+// (sortBy restricted to createdAt|startDate) plus an optional status filter.
+// Omitting `status` returns requests in every status; passing one restricts
+// the list to that status only.
+export const managerListQuerySchema = paginationQuerySchema
+  .merge(sortSchema(["createdAt", "startDate"], "createdAt"))
+  .extend({
+    status: z.enum(["PENDING", "APPROVED", "REJECTED", "CANCELLED"]).optional(),
+  });
+
+// Query params for GET /manager/decisions (the manager's own approve/reject
+// audit trail): shared pagination + sort schema (sortBy restricted to
+// decidedAt, the only column on LeaveDecision worth ordering by) plus an
+// optional action filter. Omitting `action` returns both approvals and
+// rejections; passing one restricts the list to that action only.
+export const managerDecisionsQuerySchema = paginationQuerySchema
+  .merge(sortSchema(["decidedAt"], "decidedAt"))
+  .extend({
+    action: z.enum(["APPROVED", "REJECTED"]).optional(),
+  });

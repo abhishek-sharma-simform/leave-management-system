@@ -6,6 +6,7 @@ import {
   cancelLeaveRequest,
   getLeaveRequestHistory,
   getMyLeaveRequests as getMyLeaveRequestsService,
+  findTeammatesOnLeave,
 } from "../services/leaveRequest.service.ts";
 
 export async function createLeaveRequest(req: Request, res: Response) {
@@ -250,6 +251,53 @@ export async function cancelMyLeaveRequest(req: Request, res: Response) {
 
     return res.status(500).json({
       error: "Failed to cancel leave request",
+    });
+  }
+}
+
+export async function getTeamOnLeaveController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        error: "Authentication required",
+      });
+    }
+
+    const { startDate, endDate } = req.query as unknown as {
+      startDate: Date;
+      endDate: Date;
+    };
+
+    const requests = await findTeammatesOnLeave(
+      req.user.id,
+      startDate,
+      endDate,
+    );
+
+    return res.status(200).json({
+      startDate,
+      endDate,
+      teammatesOnLeave: requests.map((request) => ({
+        userId: request.user.id,
+        name: request.user.name,
+        email: request.user.email,
+        leaveType: request.leaveType.name,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        status: request.status,
+      })),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    console.error("Get teammates on leave error:", error);
+
+    return res.status(500).json({
+      error: "Failed to fetch teammates on leave",
     });
   }
 }

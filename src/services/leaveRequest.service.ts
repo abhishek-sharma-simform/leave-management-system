@@ -241,3 +241,66 @@ export async function findOverlappingRequests(requestId: number) {
 
   return overlappingRequests;
 }
+
+export async function findTeammatesOnLeave(
+  userId: number,
+  startDate: Date,
+  endDate: Date,
+) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { managerId: true },
+  });
+
+  if (!user) {
+    throw new Error("NOT_FOUND");
+  }
+
+  if (!user.managerId) {
+    return [];
+  }
+
+  return prisma.leaveRequest.findMany({
+    where: {
+      status: {
+        in: ["APPROVED"],
+      },
+
+      userId: {
+        not: userId,
+      },
+
+      startDate: {
+        lte: endDate,
+      },
+
+      endDate: {
+        gte: startDate,
+      },
+
+      user: {
+        managerId: user.managerId,
+      },
+    },
+
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      leaveType: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+
+    orderBy: {
+      startDate: "asc",
+    },
+  });
+}

@@ -85,9 +85,9 @@ async function main() {
     ),
   );
 
-  // Grant each employee a starting balance for each leave type
+  // Grant each user (including the manager) a starting balance for each leave type
   await Promise.all(
-    [employee, employee2].flatMap((emp) =>
+    [manager, employee, employee2].flatMap((emp) =>
       leaveTypes.map((leaveType) =>
         prisma.leaveBalance.upsert({
           where: {

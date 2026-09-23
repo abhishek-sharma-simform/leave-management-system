@@ -15,14 +15,6 @@ describe("GET /api/v1/calendar", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 403 for an EMPLOYEE", async () => {
-    const employee = await createUser({ role: "EMPLOYEE" });
-    const res = await request(app)
-      .get("/api/v1/calendar?month=9&year=2026")
-      .set(authHeader(employee.id, "EMPLOYEE"));
-    expect(res.status).toBe(403);
-  });
-
   it("returns 400 for a missing month/year", async () => {
     const manager = await createUser({ role: "MANAGER" });
     const res = await request(app)
@@ -81,5 +73,60 @@ describe("GET /api/v1/calendar", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].id).toBe(boundarySpanning.id);
+  });
+
+  it("returns an EMPLOYEE's own team's (same manager's) approved leave overlapping the month", async () => {
+    const manager = await createUser({ role: "MANAGER" });
+    const otherManager = await createUser({ role: "MANAGER" });
+    const caller = await createUser({ managerId: manager.id });
+    const teammate = await createUser({ managerId: manager.id });
+    const nonTeammate = await createUser({ managerId: otherManager.id });
+    const leaveType = await createLeaveType();
+
+    // Teammate, approved, overlaps — should be included.
+    const teammateLeave = await createLeaveRequest({
+      userId: teammate.id,
+      leaveTypeId: leaveType.id,
+      startDate: new Date(2026, 8, 10),
+      endDate: new Date(2026, 8, 11),
+      daysRequested: 2,
+      status: "APPROVED",
+    });
+    // Pending — should be excluded.
+    await createLeaveRequest({
+      userId: teammate.id,
+      leaveTypeId: leaveType.id,
+      startDate: new Date(2026, 8, 12),
+      endDate: new Date(2026, 8, 13),
+      daysRequested: 2,
+      status: "PENDING",
+    });
+    // Approved but a different manager's report — should be excluded.
+    await createLeaveRequest({
+      userId: nonTeammate.id,
+      leaveTypeId: leaveType.id,
+      startDate: new Date(2026, 8, 15),
+      endDate: new Date(2026, 8, 16),
+      daysRequested: 2,
+      status: "APPROVED",
+    });
+
+    const res = await request(app)
+      .get("/api/v1/calendar?month=9&year=2026")
+      .set(authHeader(caller.id, "EMPLOYEE"));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].id).toBe(teammateLeave.id);
+  });
+
+  it("returns an empty list for an EMPLOYEE with no manager", async () => {
+    const caller = await createUser({ managerId: null });
+    const res = await request(app)
+      .get("/api/v1/calendar?month=9&year=2026")
+      .set(authHeader(caller.id, "EMPLOYEE"));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });

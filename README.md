@@ -97,30 +97,68 @@ All routes are mounted under `/api/v1`.
 | GET    | `/leave-requests/me`            | any authenticated      | List the caller's own leave requests (paginated, see below) |
 | PATCH  | `/leave-requests/me/:id`        | any authenticated      | Edit one of the caller's own **pending** requests      |
 | POST   | `/leave-requests/me/:id/cancel` | any authenticated      | Cancel one of the caller's own **pending** requests    |
+| GET    | `/leave-requests/team-on-leave?startDate=&endDate=` | any authenticated | Teammates (same manager) on leave in a date range |
 | GET    | `/leave-requests/:id/history`   | owner or their manager | View a request's approve/reject decision history       |
 | GET    | `/leave-balances/me?year=`      | any authenticated      | View the caller's own leave balances (default: current year) |
-| GET    | `/manager/requests`             | MANAGER                | List pending requests for the manager's direct reports (paginated) |
+| GET    | `/manager/requests?status=`     | MANAGER                | List the manager's direct reports' requests, all statuses by default (paginated) |
 | GET    | `/manager/requests/:id`         | MANAGER                | View one report's request, plus overlapping team leave |
 | POST   | `/manager/requests/:id/approve` | MANAGER                | Approve a pending request                              |
 | POST   | `/manager/requests/:id/reject`  | MANAGER                | Reject a pending request (requires a `reason`)         |
-| GET    | `/calendar?month=&year=`        | MANAGER                | Team's approved leave for a given month                |
+| GET    | `/manager/decisions?action=`    | MANAGER                | Audit trail of the manager's own approve/reject decisions (paginated, see below) |
+| GET    | `/calendar?month=&year=`        | any authenticated      | Caller's team's approved leave for a given month (see below) |
 
 ### Pagination, sorting and filtering
 
-`GET /leave-requests/me` and `GET /manager/requests` accept `page` (default `1`),
-`limit` (default `20`, max `100`), `sortBy` and `sortOrder` (`asc`|`desc`, default
-`desc`) query params, and return `{ data: [...], meta: { page, limit, total,
-totalPages } }` instead of a bare array. `sortBy` is restricted to an allowlist
-per endpoint (`createdAt`|`startDate`|`status` for `/leave-requests/me`,
-`createdAt`|`startDate` for `/manager/requests`) — an out-of-allowlist value is
-rejected with 400 rather than being passed through to the database. `/leave-requests/me`
-additionally accepts a `status` filter (`PENDING`|`APPROVED`|`REJECTED`|`CANCELLED`).
-`GET /calendar` is intentionally not paginated — a single month's results are
-already bounded.
+`GET /leave-requests/me`, `GET /manager/requests`, and `GET /manager/decisions` accept
+`page` (default `1`), `limit` (default `20`, max `100`), `sortBy` and `sortOrder`
+(`asc`|`desc`, default `desc`) query params, and return `{ data: [...], meta: { page,
+limit, total, totalPages } }` instead of a bare array. `sortBy` is restricted to an
+allowlist per endpoint (`createdAt`|`startDate`|`status` for `/leave-requests/me`,
+`createdAt`|`startDate` for `/manager/requests`, `decidedAt` — the only sortable column
+on `LeaveDecision` — for `/manager/decisions`) — an out-of-allowlist value is rejected
+with 400 rather than being passed through to the database. `/leave-requests/me` and
+`/manager/requests` both additionally accept an optional `status` filter
+(`PENDING`|`APPROVED`|`REJECTED`|`CANCELLED`); on `/manager/requests`, omitting it returns
+requests in every status for the manager's direct reports (it's no longer hardcoded to
+`PENDING`). `/manager/decisions` accepts an optional `action` filter
+(`APPROVED`|`REJECTED`); omitting it returns both. `GET /calendar` is intentionally not
+paginated — a single month's results are already bounded.
 
 **This changed the response shape of `/leave-requests/me` and `/manager/requests`
 from a plain array to `{ data, meta }` — a breaking change for any existing
 client of those two endpoints.**
+
+### Manager decision audit trail
+
+`GET /manager/decisions?action=` (MANAGER) is a manager-only audit log of their own
+approve/reject actions — it answers "what did I decide, when, and why" independently
+of any single request. It queries `LeaveDecision` by `actorId = caller.id` (not by the
+requester's `managerId`, so it stays correct even if a report is later reassigned to a
+different manager) and returns each decision shaped as `{ id, action, reason,
+decidedAt, request: { id, startDate, endDate, daysRequested, status, user: { id, name,
+email }, leaveType: { id, name } } }`. This is distinct from `GET
+/leave-requests/:id/history`, which is scoped to one request and viewable by either the
+requester or their manager; `/manager/decisions` is scoped to one manager and spans
+every request they've ever ruled on.
+
+### Calendar's "team" resolution
+
+`GET /calendar` is open to any authenticated user (not just managers), and "team" is
+resolved differently depending on role: a `MANAGER` sees their own direct reports
+(unchanged from the original manager-only behavior), while an `EMPLOYEE` sees everyone
+sharing their own manager — which includes the caller's own approved leave alongside
+their teammates'. An employee with no `managerId` set gets `[]`, not an error.
+
+### Team-on-leave lookup
+
+`GET /leave-requests/team-on-leave?startDate=&endDate=` is meant to back a leave-request
+form's date picker — before submitting, a caller can check who else on their team is
+already out for the dates they're considering. It looks up the caller's `managerId` and
+returns every other user sharing that same manager whose `APPROVED` leave request
+overlaps `[startDate, endDate]` (inclusive), shaped as `{ startDate, endDate,
+teammatesOnLeave: [{ userId, name, email, leaveType, startDate, endDate, status }] }`.
+Only `APPROVED` requests count — a still-pending teammate request isn't shown. A caller
+with no manager (or no teammates) gets an empty array, not an error.
 
 ### Request validation
 
