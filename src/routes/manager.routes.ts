@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getManagerRequests,
+  getManagerDecisions,
   getManagerRequestById,
   approveLeaveRequest,
   rejectLeaveRequest,
@@ -12,6 +13,7 @@ import {
   managerRequestIdParamsSchema,
   rejectReasonBodySchema,
   managerListQuerySchema,
+  managerDecisionsQuerySchema,
 } from "../validators/manager.validator.ts";
 
 const router = Router();
@@ -22,6 +24,13 @@ router.get(
   requireRole("MANAGER"),
   validate(managerListQuerySchema, "query"),
   getManagerRequests,
+);
+router.get(
+  "/decisions",
+  authMiddleware,
+  requireRole("MANAGER"),
+  validate(managerDecisionsQuerySchema, "query"),
+  getManagerDecisions,
 );
 router.get(
   "/requests/:id",
